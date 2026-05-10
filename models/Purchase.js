@@ -13,6 +13,7 @@ class Purchase {
         quantity INT NOT NULL DEFAULT 1,
         price_per_unit DECIMAL(10, 2) NOT NULL,
         total_price DECIMAL(10, 2) NOT NULL,
+        status ENUM('pending', 'completed', 'cancelled') DEFAULT 'pending',
         payment_method VARCHAR(50),
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -68,6 +69,7 @@ class Purchase {
         quantity,
         price_per_unit,
         total_price,
+        status: 'pending',
         payment_method,
         notes,
         created_at: new Date()
