@@ -1,6 +1,7 @@
 const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
 const { hashPassword, comparePassword } = require('../utils/passwordUtils');
-const { generateToken } = require('../utils/tokenUtils');
+const { generateToken, verifyToken } = require('../utils/tokenUtils');
 
 /**
  * Register new user
@@ -52,24 +53,113 @@ async function register(req, res) {
     // Create user
     const newUser = await User.create(username, hashedPassword, phone || null);
 
-    // Generate token
-    const token = generateToken(newUser);
-    req.session.token = token;
-    return res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
-      data: {
-        id: newUser.id,
-        username: newUser.username,
-        phone: newUser.phone,
-        Token:token
+    // Generate access token
+    const accessToken = generateToken(newUser);
+    req.session.token = accessToken;
+    
+    // Create refresh token
+    RefreshToken.create(newUser.id, 'web-client', null, (err, refreshToken) => {
+      if (err) {
+        console.error('Error creating refresh token:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Error creating refresh token',
+          error: err.message
+        });
       }
+      
+      return res.status(201).json({
+        success: true,
+        message: 'User registered successfully',
+        data: {
+          id: newUser.id,
+          username: newUser.username,
+          phone: newUser.phone,
+          accessToken: accessToken,
+          refreshToken: refreshToken
+        }
+      });
     });
   } catch (err) {
     console.error('Register error:', err);
     return res.status(500).json({
       success: false,
       message: 'Error registering user',
+      error: err.message
+    });
+  }
+}
+
+/**
+ * Login user
+ * POST /users/login
+ * Body: { username, password }
+ */
+async function login(req, res) {
+  try {
+    const { username, password } = req.body;
+
+    // Validation
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required',
+        error: 'Missing required fields'
+      });
+    }
+
+    // Find user by username
+    const user = await User.findByUsername(username);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password',
+        error: 'User not found'
+      });
+    }
+
+    // Compare password
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password',
+        error: 'Password mismatch'
+      });
+    }
+
+    // Generate access token
+    const accessToken = generateToken(user);
+    req.session.token = accessToken;
+
+    // Create refresh token
+    RefreshToken.create(user.id, 'web-client', null, (err, refreshToken) => {
+      if (err) {
+        console.error('Error creating refresh token:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Error creating refresh token',
+          error: err.message
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          id: user.id,
+          username: user.username,
+          phone: user.phone,
+          accessToken: accessToken,
+          refreshToken: refreshToken
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Error logging in',
       error: err.message
     });
   }
@@ -258,9 +348,132 @@ async function getProfile(req, res) {
   }
 }
 
+/**
+ * Refresh access token
+ * POST /users/refresh
+ * Body: { refreshToken }
+ */
+async function refresh(req, res) {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token is required',
+        error: 'Missing refresh token'
+      });
+    }
+
+    // Fetch refresh token from Redis
+    RefreshToken.fetchByToken(refreshToken, async (err, tokenData) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error verifying refresh token',
+          error: err.message
+        });
+      }
+
+      if (!tokenData) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid or expired refresh token',
+          error: 'Token not found'
+        });
+      }
+
+      try {
+        // Fetch user
+        const user = await User.findById(tokenData.userId);
+        if (!user) {
+          return res.status(404).json({
+            success: false,
+            message: 'User not found',
+            error: 'Invalid user ID'
+          });
+        }
+
+        // Generate new access token
+        const newAccessToken = generateToken(user);
+
+        return res.status(200).json({
+          success: true,
+          message: 'Token refreshed successfully',
+          data: {
+            accessToken: newAccessToken,
+            refreshToken: refreshToken
+          }
+        });
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error refreshing token',
+          error: err.message
+        });
+      }
+    });
+  } catch (err) {
+    console.error('Refresh error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Error refreshing token',
+      error: err.message
+    });
+  }
+}
+
+/**
+ * Logout user (revoke refresh token)
+ * POST /users/logout
+ * Requires: Authentication (JWT token)
+ * Body: { refreshToken }
+ */
+async function logout(req, res) {
+  try {
+    const userId = req.user.id;
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token is required',
+        error: 'Missing refresh token'
+      });
+    }
+
+    // Revoke refresh token from Redis
+    RefreshToken.removeByRefreshToken(refreshToken, (err) => {
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error logging out',
+          error: err.message
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Logged out successfully',
+        data: { userId: userId }
+      });
+    });
+  } catch (err) {
+    console.error('Logout error:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Error logging out',
+      error: err.message
+    });
+  }
+}
+
 module.exports = {
   register,
+  login,
   update,
   deleteUser,
-  getProfile
+  getProfile,
+  refresh,
+  logout
 };

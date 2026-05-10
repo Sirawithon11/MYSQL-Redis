@@ -11,6 +11,28 @@ const { authenticateToken } = require('../middleware/authMiddleware');
 router.post('/register', userController.register);
 
 /**
+ * POST /users/login
+ * Login user
+ * Body: { username, password }
+ */
+router.post('/login', userController.login);
+
+/**
+ * POST /users/refresh
+ * Refresh access token using refresh token
+ * Body: { refreshToken }
+ */
+router.post('/refresh', userController.refresh);
+
+/**
+ * POST /users/logout
+ * Logout user (revoke refresh token)
+ * Requires: JWT token in Authorization header
+ * Body: { refreshToken }
+ */
+router.post('/logout', authenticateToken, userController.logout);
+
+/**
  * PUT /users/:id
  * Update user
  * Requires: JWT token in Authorization header
