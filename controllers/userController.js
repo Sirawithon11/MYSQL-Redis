@@ -55,10 +55,11 @@ async function register(req, res) {
 
     // Generate access token
     const accessToken = generateToken(newUser);
-    req.session.token = accessToken;
-    
+    req.session.accessToken = accessToken;
+    req.session.userId = newUser.id;
+    req.session.username = newUser.username;
     // Create refresh token
-    RefreshToken.create(newUser.id, 'web-client', null, (err, refreshToken) => {
+    RefreshToken.create(newUser.id,'web-client', null, (err, refreshToken) => {
       if (err) {
         console.error('Error creating refresh token:', err);
         return res.status(500).json({
@@ -130,8 +131,9 @@ async function login(req, res) {
 
     // Generate access token
     const accessToken = generateToken(user);
-    req.session.token = accessToken;
-
+    req.session.accessToken = accessToken;
+    req.session.userId = user.id;
+    req.session.username = user.username;
     // Create refresh token
     RefreshToken.create(user.id, 'web-client', null, (err, refreshToken) => {
       if (err) {
@@ -279,7 +281,7 @@ async function deleteUser(req, res) {
     }
 
     // Authorization: User can only delete their own profile
-    if (req.user.id !== parseInt(userId)) {
+    if (req.session.userId !== parseInt(userId)) {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to delete this user',
@@ -431,7 +433,7 @@ async function refresh(req, res) {
  */
 async function logout(req, res) {
   try {
-    const userId = req.user.id;
+    const userId = req.session.userId;
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
@@ -441,6 +443,8 @@ async function logout(req, res) {
         error: 'Missing refresh token'
       });
     }
+
+    req.session = null;
 
     // Revoke refresh token from Redis
     RefreshToken.removeByRefreshToken(refreshToken, (err) => {

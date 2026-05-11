@@ -65,7 +65,7 @@ module.exports.getScope = function(refreshToken) {
 module.exports.fetchByToken = function(token, cb) {
     (async () => {
         try {
-            const key = `refreshToken:${token}`;
+            const key = `refreshToken:token:${token}`;
             const data = await redis.get(key);
             
             if (!data) {
@@ -98,7 +98,7 @@ module.exports.removeByUserIdClientId = function(userId, clientId, cb) {
                 return cb(null);
             }
             
-            const tokenKey = `refreshToken:${token}`;
+            const tokenKey = `refreshToken:token:${token}`;
             await redis.del(tokenKey);
             await redis.del(lookupKey);
             
@@ -119,7 +119,7 @@ module.exports.removeByUserIdClientId = function(userId, clientId, cb) {
 module.exports.removeByRefreshToken = function(token, cb) {
     (async () => {
         try {
-            const tokenKey = `refreshToken:${token}`;
+            const tokenKey = `refreshToken:token:${token}`;
             const data = await redis.get(tokenKey);
             
             if (!data) {
@@ -162,7 +162,7 @@ module.exports.create = function(userId, clientId, scope, cb) {
                 createdAt: new Date().toISOString()
             };
             
-            const tokenKey = `refreshToken:${token}`;
+            const tokenKey = `refreshToken:token:${token}`;
             const lookupKey = `refreshToken:user:${userId}:client:${clientId}`;
             
             // Set with 30-day expiration
