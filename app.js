@@ -2,11 +2,13 @@ var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
 var logger = require('morgan');
-var cookieSession = require('cookie-session')
+var cookieSession = require('cookie-session');
+var passport = require('./config/passport');
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var productsRouter = require('./routes/products');
 var purchasesRouter = require('./routes/purchases');
+var authRouter = require('./routes/auth');
 var User = require('./models/User');
 var Product = require('./models/Product');
 var Purchase = require('./models/Purchase');
@@ -31,9 +33,14 @@ app.use(cookieSession({
   // Cookie Options
   maxAge: 24 * 60 * 60 * 1000 // 24 hours
 }));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-
+app.use('/auth', authRouter);
 app.use('/users', usersRouter);
 app.use('/products', productsRouter);
 app.use('/purchases', purchasesRouter);

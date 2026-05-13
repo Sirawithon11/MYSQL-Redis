@@ -15,7 +15,7 @@ const crypto = require('crypto');
  * Unique key: userId + clientId pair should be unique
  * 
  * Redis Storage Strategy:
- * - refreshToken:{token} -> JSON object with userId, clientId, scope, createdAt
+ * - refreshToken:token{token} -> JSON object with userId, clientId, scope, createdAt
  * - refreshToken:user:{userId}:client:{clientId} -> token (for quick lookup)
  */
 

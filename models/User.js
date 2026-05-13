@@ -9,8 +9,10 @@ class User {
       CREATE TABLE IF NOT EXISTS users (
         id INT PRIMARY KEY AUTO_INCREMENT,
         username VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
+        password VARCHAR(255),
         phone VARCHAR(20),
+        googleId VARCHAR(255) UNIQUE,
+        email VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
@@ -54,7 +56,7 @@ class User {
    * @returns {object|null} User object or null if not found
    */
   static async findById(id) {
-    const query = 'SELECT id, username, password, phone, created_at, updated_at FROM users WHERE id = ?';
+    const query = 'SELECT id, username, password, phone, googleId, email, created_at, updated_at FROM users WHERE id = ?';
     const connection = await pool.getConnection();
     try {
       const [rows] = await connection.query(query, [id]);
@@ -70,11 +72,66 @@ class User {
    * @returns {object|null} User object with password hash or null
    */
   static async findByUsername(username) {
-    const query = 'SELECT id, username, password, phone, created_at, updated_at FROM users WHERE username = ?';
+    const query = 'SELECT id, username, password, phone, googleId, email, created_at, updated_at FROM users WHERE username = ?';
     const connection = await pool.getConnection();
     try {
       const [rows] = await connection.query(query, [username]);
       return rows.length > 0 ? rows[0] : null;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Find user by Google ID
+   * @param {string} googleId
+   * @returns {object|null} User object or null if not found
+   */
+  static async findByGoogleId(googleId) {
+    const query = 'SELECT id, username, password, phone, googleId, email, created_at, updated_at FROM users WHERE googleId = ?';
+    const connection = await pool.getConnection();
+    try {
+      const [rows] = await connection.query(query, [googleId]);
+      return rows.length > 0 ? rows[0] : null;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Create a user with Google OAuth
+   * @param {string} googleId
+   * @param {string} email
+   * @param {string} username
+   * @returns {object} Created user object
+   */
+  static async createGoogleUser(googleId, email, username = null) {
+    let finalUsername = username;
+    
+    // Generate username from email if not provided
+    if (!finalUsername) {
+      finalUsername = email.split('@')[0] + '_' + googleId.substring(0, 5);
+    }
+
+    // Check if username already exists
+    let counter = 1;
+    let originalUsername = finalUsername;
+    while (await this.usernameExists(finalUsername)) {
+      finalUsername = originalUsername + counter;
+      counter++;
+    }
+
+    const query = 'INSERT INTO users (googleId, email, username) VALUES (?, ?, ?)';
+    const connection = await pool.getConnection();
+    try {
+      const [result] = await connection.query(query, [googleId, email, finalUsername]);
+      return {
+        id: result.insertId,
+        googleId,
+        email,
+        username: finalUsername,
+        created_at: new Date()
+      };
     } finally {
       connection.release();
     }
